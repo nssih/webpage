@@ -137,7 +137,12 @@ body{font-family:'Noto Serif SC','STKaiti','KaiTi',serif;color:var(--gold);
   margin-left:2px;
 }
 
-/* 小六壬六宫时辰格 */
+/* 横向信息条（小六壬/奇门）*/
+.hbar{display:flex;flex-direction:row;gap:6px;align-items:stretch;padding:6px 10px;}
+.hbar-cell{text-align:center;flex-shrink:0;min-width:60px;display:flex;flex-direction:column;justify-content:center;}
+.hbar-cell.grow{flex:1;}
+.hbar-div{width:1px;background:var(--card-bd);align-self:stretch;flex-shrink:0;}
+.xlr-wheel-wrap{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;}
 .xlr-cell{
   display:inline-flex;flex-direction:column;align-items:center;justify-content:center;
   width:clamp(32px,4vw,46px);height:clamp(32px,4vw,46px);
@@ -156,41 +161,44 @@ body{font-family:'Noto Serif SC','STKaiti','KaiTi',serif;color:var(--gold);
 .xlr-cell.xc-cur .xc-shi{color:rgba(255,200,80,0.7);}
 
 @media(max-aspect-ratio:3/4){
-  html,body{overflow-y:auto;height:auto;}
+  html,body{height:auto;overflow-x:hidden;overflow-y:auto;}
   #app{
     grid-template-columns:1fr;
     grid-template-rows:auto auto auto;
-    height:auto;
-    padding:8px;
-    gap:6px;
+    height:auto;min-height:100vh;
+    padding:8px;gap:6px;
   }
-  #left{padding:4px 0;}
-  /* 4列变2列 */
+  #right{overflow:visible;height:auto;}
+  #left{padding:4px 0;overflow:visible;height:auto;}
+  .row{flex:none;min-height:auto;}
+  .card{min-height:auto;overflow:visible;height:auto;}
   .r4{grid-template-columns:repeat(2,1fr);}
-  /* 3列变2列 */
   .r3{grid-template-columns:repeat(2,1fr);}
-  /* 时钟自适应宽度 */
-  #clock-box canvas,#clock-box{
-    width:min(88vw,60vh) !important;
-    height:min(88vw,60vh) !important;
+  /* 横向条在手机上改为竖向网格 */
+  .hbar{flex-direction:column;padding:8px;}
+  .hbar-div{width:auto;height:1px;align-self:stretch;}
+  .hbar-cell{min-width:0;padding:4px 0;}
+  .xlr-wheel-wrap{padding:4px 0;}
+  /* 六宫格在手机上缩小 */
+  .xlr-cell{width:clamp(36px,12vw,46px);height:clamp(36px,12vw,46px);}
+  #clock-box{
+    width:min(88vw,55vh) !important;
+    height:min(88vw,55vh) !important;
+  }
+  #clock-box canvas{
+    width:min(88vw,55vh) !important;
+    height:min(88vw,55vh) !important;
   }
   #center-dot{width:10px;height:10px;}
-  /* 小六壬/奇门横向布局在窄屏改为竖向 */
-  .row.r1 .card[style*='flex-direction:row']{
-    flex-direction:column !important;
-    align-items:stretch !important;
-    gap:4px !important;
-  }
-  .row.r1 .card [style*='width:1px']{
-    width:auto !important;
-    height:1px !important;
-  }
-  /* 卡片字体稍微放大一点，手机看得清 */
-  .card .vl{font-size:clamp(12px,3.5vw,16px);}
-  .card .vl.sm{font-size:clamp(11px,3vw,13px);}
-  .card .vl.xs{font-size:clamp(10px,2.5vw,12px);}
-  .card .lb{font-size:clamp(9px,2.2vw,11px);}
-  .card .sb{font-size:clamp(8px,2vw,10px);}
+  .card .vl{font-size:clamp(13px,3.8vw,17px);}
+  .card .vl.sm{font-size:clamp(12px,3.2vw,14px);}
+  .card .vl.xs{font-size:clamp(11px,2.8vw,13px);}
+  .card .lb{font-size:clamp(10px,2.4vw,12px);}
+  .card .sb{font-size:clamp(9px,2.1vw,11px);}
+  #dt-hms{font-size:clamp(18px,5vw,26px);}
+  #dt-ms{font-size:clamp(11px,2.5vw,14px);}
+  .cd-c .cd-v{font-size:clamp(13px,3.5vw,17px);}
+  .cd-c .cd-l{font-size:clamp(9px,2.2vw,11px);}
 }
 </style>
 </head>
@@ -257,20 +265,19 @@ body{font-family:'Noto Serif SC','STKaiti','KaiTi',serif;color:var(--gold);
     </div>
     <!-- 小六壬 -->
     <div class="row r1">
-      <div class="card" style="flex-direction:row;gap:6px;justify-content:space-around;padding:4px 8px;">
-        <div style="text-align:center;flex-shrink:0;min-width:72px;">
+      <div class="card hbar">
+        <div class="hbar-cell">
           <div class="lb">小六壬</div>
           <div class="vl sm" id="xlr-palace" style="color:#ffc840;">—</div>
           <div class="sb" id="xlr-meaning">—</div>
         </div>
-        <div style="width:1px;background:var(--card-bd);align-self:stretch;"></div>
-        <!-- 六宫时辰图 -->
-        <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;">
+        <div class="hbar-div"></div>
+        <div class="xlr-wheel-wrap">
           <div class="lb">六宫十二时辰</div>
-          <div id="xlr-wheel" style="display:flex;gap:3px;flex-wrap:wrap;justify-content:center;"></div>
+          <div id="xlr-wheel"></div>
         </div>
-        <div style="width:1px;background:var(--card-bd);align-self:stretch;"></div>
-        <div style="text-align:center;flex-shrink:0;min-width:52px;">
+        <div class="hbar-div"></div>
+        <div class="hbar-cell">
           <div class="lb">今日吉凶</div>
           <div class="vl sm" id="xlr-luck">—</div>
         </div>
@@ -278,25 +285,25 @@ body{font-family:'Noto Serif SC','STKaiti','KaiTi',serif;color:var(--gold);
     </div>
     <!-- 奇门遁甲 -->
     <div class="row r1">
-      <div class="card" style="flex-direction:row;gap:6px;justify-content:space-around;padding:4px 8px;">
-        <div style="text-align:center;flex-shrink:0">
+      <div class="card hbar">
+        <div class="hbar-cell">
           <div class="lb">奇门遁甲</div>
           <div class="vl sm" id="qm-ju" style="color:#aaccff;">—</div>
           <div class="sb" id="qm-ju-sub">—</div>
         </div>
-        <div style="width:1px;background:var(--card-bd);align-self:stretch;"></div>
-        <div style="text-align:center;flex-shrink:0">
+        <div class="hbar-div"></div>
+        <div class="hbar-cell">
           <div class="lb">值符星</div>
           <div class="vl sm" id="qm-star">—</div>
         </div>
-        <div style="width:1px;background:var(--card-bd);align-self:stretch;"></div>
-        <div style="text-align:center;flex-shrink:0">
+        <div class="hbar-div"></div>
+        <div class="hbar-cell">
           <div class="lb">值使门</div>
           <div class="vl sm" id="qm-door">—</div>
           <div class="sb" id="qm-door-sub">—</div>
         </div>
-        <div style="width:1px;background:var(--card-bd);align-self:stretch;"></div>
-        <div style="text-align:center;flex:1;display:flex;flex-direction:column;justify-content:center;">
+        <div class="hbar-div"></div>
+        <div class="hbar-cell grow">
           <div class="lb">时局格言</div>
           <div class="vl xs" id="qm-msg">—</div>
         </div>
@@ -661,7 +668,10 @@ function getQiMen(now) {
   ).getLunar();
 
   const timeNS = lunar.getTimeNineStar();
-  const idx    = timeNS._p.index; // 0-8
+  // 优先用公开toString匹配，_p.index作备用
+  const str = timeNS.toString();
+  let idx = NineStar.NAME_BEI_DOU.findIndex(n => str.includes(n));
+  if(idx < 0) idx = timeNS._p ? timeNS._p.index : 0;
 
   const starName = NineStar.NAME_QI_MEN[idx];   // 天蓬/天芮...
   const doorChar = NineStar.BA_MEN_QI_MEN[idx]; // 休/死/伤...
