@@ -1,10 +1,915 @@
 <!DOCTYPE html>
-<html>
+<html lang="zh">
 <head>
-    <title>My First Cloudflare Site</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>天地玄黄 · 时轮</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/lunar-javascript@1.7.7/lunar.min.js"></script>
+<style>
+:root {
+  --gold:#f0d060; --gold-dim:rgba(200,155,45,0.5);
+  --card-bg:rgba(14,7,1,0.90); --card-bd:rgba(200,155,45,0.25);
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+html,body{width:100%;height:100%;background:#000;overflow:hidden;}
+body{font-family:'Noto Serif SC','STKaiti','KaiTi',serif;color:var(--gold);
+     display:flex;align-items:stretch;justify-content:center;}
+
+#sf{position:fixed;inset:0;z-index:0;pointer-events:none;}
+
+#app{position:relative;z-index:1;width:100%;height:100%;
+     display:grid;grid-template-columns:1fr 1fr;grid-template-rows:auto 1fr;
+     gap:8px;padding:10px;}
+
+#topbar{grid-column:1/-1;display:flex;align-items:center;justify-content:space-between;
+        padding-bottom:7px;border-bottom:1px solid var(--card-bd);flex-shrink:0;}
+#topbar .t-title{font-size:clamp(9px,1.1vw,13px);letter-spacing:8px;color:var(--gold-dim);}
+#topbar .t-date{font-size:clamp(10px,1.2vw,14px);letter-spacing:2px;}
+
+#left{display:flex;flex-direction:column;align-items:center;justify-content:center;
+      gap:8px;min-width:0;overflow:hidden;}
+
+/* 时钟盒：canvas + DOM指针叠层 */
+#clock-box{position:relative;flex-shrink:0;}
+#clock-box canvas{display:block;}
+
+/* DOM 指针 — 用 CSS transform 旋转，GPU合成，完全不抖 */
+.hand-wrap{
+  position:absolute;
+  top:50%;left:50%;
+  transform-origin:0 0;
+  pointer-events:none;
+  will-change:transform;
+}
+.hand{
+  position:absolute;
+  transform-origin:50% 100%;  /* 旋转支点在元素底部中心，即表盘圆心 */
+  left:50%;
+  will-change:transform;
+}
+/* 时针 */
+#h-hand .hand{
+  width:var(--hw,8px);
+  height:var(--hl,80px);
+  margin-left:calc(var(--hw,8px)/-2);
+  bottom:0;
+  background:linear-gradient(to top,#c88000,#f5d040,#ffeea0);
+  clip-path:polygon(50% 0%,100% 88%,50% 100%,0% 88%);
+  border-radius:2px;
+}
+/* 分针 */
+#m-hand .hand{
+  width:var(--mw,5px);
+  height:var(--ml,115px);
+  margin-left:calc(var(--mw,5px)/-2);
+  bottom:0;
+  background:linear-gradient(to top,#2a7a50,#6adca8,#cfffec);
+  clip-path:polygon(50% 0%,100% 88%,50% 100%,0% 88%);
+  border-radius:2px;
+}
+/* 秒针 */
+#s-hand .hand{
+  width:var(--sw,2px);
+  height:var(--sl,138px);
+  margin-left:calc(var(--sw,2px)/-2);
+  bottom:0;
+  background:linear-gradient(to top,#900,#ff4444,#ffaaaa);
+  clip-path:polygon(50% 0%,100% 88%,50% 100%,0% 88%);
+  border-radius:1px;
+}
+
+#cd{width:100%;background:var(--card-bg);border:1px solid var(--card-bd);border-radius:8px;
+    padding:6px 8px;display:grid;grid-template-columns:repeat(4,1fr);gap:4px;text-align:center;}
+.cd-c .cd-l{font-size:clamp(8px,0.75vw,10px);color:var(--gold-dim);letter-spacing:1px;}
+.cd-c .cd-v{font-size:clamp(11px,1.15vw,15px);color:var(--gold);
+            font-variant-numeric:tabular-nums;letter-spacing:1px;}
+
+#right{display:flex;flex-direction:column;gap:6px;min-width:0;overflow:hidden;}
+.row{display:grid;gap:6px;flex:1;min-height:0;}
+.r4{grid-template-columns:repeat(4,1fr);}
+.r3{grid-template-columns:repeat(3,1fr);}
+.r2{grid-template-columns:repeat(2,1fr);}
+
+.card{background:var(--card-bg);border:1px solid var(--card-bd);border-radius:7px;
+      padding:4px 6px;display:flex;flex-direction:column;align-items:center;
+      justify-content:center;text-align:center;overflow:hidden;min-height:0;}
+.card.hl{border-color:rgba(255,155,35,0.4);}
+.card .lb{font-size:clamp(8px,0.72vw,10px);color:var(--gold-dim);letter-spacing:2px;
+          margin-bottom:2px;white-space:nowrap;}
+.card .vl{font-size:clamp(11px,1.2vw,16px);color:var(--gold);letter-spacing:2px;line-height:1.25;}
+.card .vl.hl{color:#ffc840;}
+.card .vl.sm{font-size:clamp(10px,0.95vw,13px);}
+.card .vl.xs{font-size:clamp(8px,0.78vw,11px);line-height:1.6;}
+.card .sb{font-size:clamp(7px,0.65vw,9px);color:var(--gold-dim);margin-top:1px;}
+.yi{color:#7ee8a2;} .ji{color:#ff8a7a;}
+
+/* 中心点 */
+#center-dot{
+  position:absolute;
+  width:13px;height:13px;
+  border-radius:50%;
+  background:radial-gradient(circle at 40% 35%,#fffae0,#c88808);
+  border:1.5px solid rgba(255,220,80,0.6);
+  transform:translate(-50%,-50%);
+  top:50%;left:50%;
+  pointer-events:none;
+  z-index:10;
+}
+/* 数字时间 — 转盘下方、倒计时上方 */
+#digital-time{
+  text-align:center;
+  line-height:1.3;
+  letter-spacing:2px;
+}
+#dt-hms{
+  font-family:monospace;
+  font-weight:bold;
+  font-size:clamp(16px,2.2vw,26px);
+  color:#f0d060;
+}
+#dt-ms{
+  font-family:monospace;
+  font-size:clamp(10px,1vw,14px);
+  color:rgba(200,160,40,0.55);
+  margin-left:2px;
+}
+
+/* 小六壬六宫时辰格 */
+.xlr-cell{
+  display:inline-flex;flex-direction:column;align-items:center;justify-content:center;
+  width:clamp(32px,4vw,46px);height:clamp(32px,4vw,46px);
+  border-radius:5px;border:1px solid rgba(200,155,45,0.2);
+  background:rgba(20,10,2,0.6);
+  font-size:clamp(8px,0.7vw,10px);color:rgba(200,155,45,0.55);
+  gap:1px;transition:background 0.3s;
+}
+.xlr-cell .xc-gong{font-size:clamp(9px,0.85vw,12px);font-weight:bold;color:var(--gold);}
+.xlr-cell .xc-shi{font-size:clamp(7px,0.65vw,9px);color:rgba(200,155,45,0.5);}
+.xlr-cell.xc-cur{
+  background:rgba(255,180,40,0.18);
+  border-color:rgba(255,180,40,0.6);
+}
+.xlr-cell.xc-cur .xc-gong{color:#ffc840;text-shadow:0 0 6px rgba(255,180,40,0.6);}
+.xlr-cell.xc-cur .xc-shi{color:rgba(255,200,80,0.7);}
+
+@media(max-aspect-ratio:3/4){
+  html,body{overflow-y:auto;height:auto;}
+  #app{
+    grid-template-columns:1fr;
+    grid-template-rows:auto auto auto;
+    height:auto;
+    padding:8px;
+    gap:6px;
+  }
+  #left{padding:4px 0;}
+  /* 4列变2列 */
+  .r4{grid-template-columns:repeat(2,1fr);}
+  /* 3列变2列 */
+  .r3{grid-template-columns:repeat(2,1fr);}
+  /* 时钟自适应宽度 */
+  #clock-box canvas,#clock-box{
+    width:min(88vw,60vh) !important;
+    height:min(88vw,60vh) !important;
+  }
+  #center-dot{width:10px;height:10px;}
+  /* 小六壬/奇门横向布局在窄屏改为竖向 */
+  .row.r1 .card[style*='flex-direction:row']{
+    flex-direction:column !important;
+    align-items:stretch !important;
+    gap:4px !important;
+  }
+  .row.r1 .card [style*='width:1px']{
+    width:auto !important;
+    height:1px !important;
+  }
+  /* 卡片字体稍微放大一点，手机看得清 */
+  .card .vl{font-size:clamp(12px,3.5vw,16px);}
+  .card .vl.sm{font-size:clamp(11px,3vw,13px);}
+  .card .vl.xs{font-size:clamp(10px,2.5vw,12px);}
+  .card .lb{font-size:clamp(9px,2.2vw,11px);}
+  .card .sb{font-size:clamp(8px,2vw,10px);}
+}
+</style>
 </head>
 <body>
-    <h1>Hello Cloudflare!</h1>
-    <p>My first website is online.</p>
+<canvas id="sf"></canvas>
+<div id="app">
+  <div id="topbar">
+    <div class="t-title">天 地 玄 黄 · 宇 宙 洪 荒</div>
+    <div class="t-date" id="t-date">—</div>
+  </div>
+
+  <div id="left">
+    <div id="clock-box">
+      <!-- 表盘 canvas（只画背景转盘） -->
+      <canvas id="cc"></canvas>
+      <!-- DOM 指针 -->
+      <div class="hand-wrap" id="h-hand"><div class="hand"></div></div>
+      <div class="hand-wrap" id="m-hand"><div class="hand"></div></div>
+      <div class="hand-wrap" id="s-hand"><div class="hand"></div></div>
+      <!-- DOM 中心点 -->
+      <div id="center-dot"></div>
+    </div>
+    <!-- 数字时间显示在转盘外 -->
+    <div id="digital-time">
+      <span id="dt-hms">—</span>
+      <span id="dt-ms">—</span>
+    </div>
+    <div id="cd">
+      <div class="cd-c"><div class="cd-l" id="cd-l1">距—年元旦</div><div class="cd-v" id="cd-days">—</div><div class="cd-l">天</div></div>
+      <div class="cd-c"><div class="cd-l">今日已过</div><div class="cd-v" id="cd-hms">—</div><div class="cd-l">小时</div></div>
+      <div class="cd-c"><div class="cd-l">本年已过</div><div class="cd-v" id="cd-pct">—</div></div>
+      <div class="cd-c"><div class="cd-l">今日第</div><div class="cd-v" id="cd-yday">—</div><div class="cd-l">天</div></div>
+    </div>
+  </div>
+
+  <div id="right">
+    <div class="row r4">
+      <div class="card hl"><div class="lb">年柱</div><div class="vl hl" id="r-yy">—</div><div class="sb" id="r-ys">—</div></div>
+      <div class="card hl"><div class="lb">月柱</div><div class="vl hl" id="r-my">—</div><div class="sb" id="r-ms">—</div></div>
+      <div class="card hl"><div class="lb">日柱</div><div class="vl hl" id="r-dy">—</div><div class="sb" id="r-ds">—</div></div>
+      <div class="card hl"><div class="lb">时柱</div><div class="vl hl" id="r-hy">—</div><div class="sb" id="r-hs">—</div></div>
+    </div>
+    <div class="row r4">
+      <div class="card"><div class="lb">农历</div><div class="vl sm" id="r-nl">—</div><div class="sb" id="r-liuyao">—</div></div>
+      <div class="card"><div class="lb">生肖</div><div class="vl" id="r-sx">—</div><div class="sb" id="r-ss">—</div></div>
+      <div class="card"><div class="lb">时辰</div><div class="vl sm" id="r-sc">—</div><div class="sb" id="r-st">—</div></div>
+      <div class="card"><div class="lb">星期</div><div class="vl sm" id="r-wd">—</div><div class="sb" id="r-wds">—</div></div>
+    </div>
+    <div class="row r4">
+      <div class="card"><div class="lb">日纳音</div><div class="vl sm" id="r-wx">—</div><div class="sb" id="r-chong">—</div></div>
+      <div class="card"><div class="lb">当前节气</div><div class="vl sm" id="r-jq">—</div><div class="sb" id="r-jqs">—</div></div>
+      <div class="card"><div class="lb">下个节气</div><div class="vl sm" id="r-nj">—</div><div class="sb" id="r-njs">—</div></div>
+      <div class="card"><div class="lb">吉神方位</div><div class="vl sm" id="r-se">—</div><div class="sb" id="r-di">—</div></div>
+    </div>
+    <div class="row r4">
+      <div class="card"><div class="lb">物候</div><div class="vl sm" id="r-wuhou">—</div></div>
+      <div class="card"><div class="lb">二十八宿</div><div class="vl sm" id="r-xiu">—</div><div class="sb" id="r-xiu-luck">—</div></div>
+      <div class="card"><div class="lb">日吉神</div><div class="vl xs yi" id="r-jishen">—</div></div>
+      <div class="card"><div class="lb">日凶煞</div><div class="vl xs ji" id="r-xiong">—</div></div>
+    </div>
+    <div class="row r2">
+      <div class="card"><div class="lb">今日宜</div><div class="vl xs yi" id="r-yi">—</div></div>
+      <div class="card"><div class="lb">今日忌</div><div class="vl xs ji" id="r-ji">—</div></div>
+    </div>
+    <!-- 小六壬 -->
+    <div class="row r1">
+      <div class="card" style="flex-direction:row;gap:6px;justify-content:space-around;padding:4px 8px;">
+        <div style="text-align:center;flex-shrink:0;min-width:72px;">
+          <div class="lb">小六壬</div>
+          <div class="vl sm" id="xlr-palace" style="color:#ffc840;">—</div>
+          <div class="sb" id="xlr-meaning">—</div>
+        </div>
+        <div style="width:1px;background:var(--card-bd);align-self:stretch;"></div>
+        <!-- 六宫时辰图 -->
+        <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;">
+          <div class="lb">六宫十二时辰</div>
+          <div id="xlr-wheel" style="display:flex;gap:3px;flex-wrap:wrap;justify-content:center;"></div>
+        </div>
+        <div style="width:1px;background:var(--card-bd);align-self:stretch;"></div>
+        <div style="text-align:center;flex-shrink:0;min-width:52px;">
+          <div class="lb">今日吉凶</div>
+          <div class="vl sm" id="xlr-luck">—</div>
+        </div>
+      </div>
+    </div>
+    <!-- 奇门遁甲 -->
+    <div class="row r1">
+      <div class="card" style="flex-direction:row;gap:6px;justify-content:space-around;padding:4px 8px;">
+        <div style="text-align:center;flex-shrink:0">
+          <div class="lb">奇门遁甲</div>
+          <div class="vl sm" id="qm-ju" style="color:#aaccff;">—</div>
+          <div class="sb" id="qm-ju-sub">—</div>
+        </div>
+        <div style="width:1px;background:var(--card-bd);align-self:stretch;"></div>
+        <div style="text-align:center;flex-shrink:0">
+          <div class="lb">值符星</div>
+          <div class="vl sm" id="qm-star">—</div>
+        </div>
+        <div style="width:1px;background:var(--card-bd);align-self:stretch;"></div>
+        <div style="text-align:center;flex-shrink:0">
+          <div class="lb">值使门</div>
+          <div class="vl sm" id="qm-door">—</div>
+          <div class="sb" id="qm-door-sub">—</div>
+        </div>
+        <div style="width:1px;background:var(--card-bd);align-self:stretch;"></div>
+        <div style="text-align:center;flex:1;display:flex;flex-direction:column;justify-content:center;">
+          <div class="lb">时局格言</div>
+          <div class="vl xs" id="qm-msg">—</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+'use strict';
+
+/* ══ 星空 ══════════════════════════════════════════ */
+const sfC=document.getElementById('sf'),sfX=sfC.getContext('2d');
+let stars=[];
+function initStars(){
+  sfC.width=innerWidth;sfC.height=innerHeight;
+  stars=Array.from({length:180},()=>({
+    x:Math.random()*innerWidth,y:Math.random()*innerHeight,
+    r:Math.random()*1.1+0.15,spd:Math.random()*0.005+0.002,ph:Math.random()*Math.PI*2
+  }));
+}
+function renderStars(T){
+  sfX.clearRect(0,0,sfC.width,sfC.height);
+  stars.forEach(s=>{
+    const a=0.2+0.75*Math.abs(Math.sin(s.ph+T*s.spd));
+    sfX.beginPath();sfX.arc(s.x,s.y,s.r,0,Math.PI*2);
+    sfX.fillStyle=`rgba(215,190,120,${a})`;sfX.fill();
+  });
+}
+initStars();
+window.addEventListener('resize',()=>{initStars();resizeClock();});
+
+/* ══ 历法数据 ══════════════════════════════════════ */
+const TG=['甲','乙','丙','丁','戊','己','庚','辛','壬','癸'];
+const DZ=['子','丑','寅','卯','辰','巳','午','未','申','酉','戌','亥'];
+const SX=['鼠','牛','虎','兔','龙','蛇','马','羊','猴','鸡','狗','猪'];
+const WX_TG=['木','木','火','火','土','土','金','金','水','水'];
+const WX_DZ=['水','土','木','木','土','火','火','土','金','金','土','水'];
+const YY=['阳','阴','阳','阴','阳','阴','阳','阴','阳','阴'];
+const WD=['星期日','星期一','星期二','星期三','星期四','星期五','星期六'];
+const RJ12=['建','除','满','平','定','执','破','危','成','收','开','闭'];
+const SHICHEN=[
+  {n:'子时',s:23,e:1},{n:'丑时',s:1,e:3},{n:'寅时',s:3,e:5},{n:'卯时',s:5,e:7},
+  {n:'辰时',s:7,e:9},{n:'巳时',s:9,e:11},{n:'午时',s:11,e:13},{n:'未时',s:13,e:15},
+  {n:'申时',s:15,e:17},{n:'酉时',s:17,e:19},{n:'戌时',s:19,e:21},{n:'亥时',s:21,e:23}
+];
+const JQ=[
+  {n:'小寒',m:1,d:6},{n:'大寒',m:1,d:20},{n:'立春',m:2,d:4},{n:'雨水',m:2,d:19},
+  {n:'惊蛰',m:3,d:6},{n:'春分',m:3,d:21},{n:'清明',m:4,d:5},{n:'谷雨',m:4,d:20},
+  {n:'立夏',m:5,d:6},{n:'小满',m:5,d:21},{n:'芒种',m:6,d:6},{n:'夏至',m:6,d:21},
+  {n:'小暑',m:7,d:7},{n:'大暑',m:7,d:23},{n:'立秋',m:8,d:7},{n:'处暑',m:8,d:23},
+  {n:'白露',m:9,d:8},{n:'秋分',m:9,d:23},{n:'寒露',m:10,d:8},{n:'霜降',m:10,d:23},
+  {n:'立冬',m:11,d:7},{n:'小雪',m:11,d:22},{n:'大雪',m:12,d:7},{n:'冬至',m:12,d:22}
+];
+const LM=['正','二','三','四','五','六','七','八','九','十','冬','腊'];
+const LD=['初一','初二','初三','初四','初五','初六','初七','初八','初九','初十',
+  '十一','十二','十三','十四','十五','十六','十七','十八','十九','二十',
+  '廿一','廿二','廿三','廿四','廿五','廿六','廿七','廿八','廿九','三十'];
+const YI=['祭祀','祈福','求嗣','开光','塑绘','沐浴','酬神','订盟','纳采','嫁娶',
+  '安床','合帐','出行','移徙','入宅','安香','开市','纳财','交易','立券','挂匾',
+  '动土','起基','安门','上梁','造屋','开井','修造','裁衣','纳畜','种植','捕鱼','解除'];
+const JI=['诸事不宜','行船','破土','安葬','开市','动土','出行','嫁娶','造屋',
+  '伐木','开仓','出货','词讼','争讼','栽种','掘井','放水','安床','入宅','上梁','针灸','求医'];
+const JISHEN=['天德','月德','天恩','月恩','天赦','天愿','岁德','三合','六合','五富',
+  '福生','天财','金堂','玉堂','福德','大明','时德','相日','青龙','明堂','金匮','宝光'];
+const XIONG=['月破','大耗','灾煞','天火','地火','劫煞','白虎','天牢','玄武','勾陈','朱雀','五鬼','受死'];
+
+function gz(n){return TG[((n%10)+10)%10]+DZ[((n%12)+12)%12];}
+function yearGZ(y){return gz(y-1984);}
+function monthGZ(y,m){return gz((y-1984)*12+(m-2)+2);}
+function dayBase(dt){
+  return Math.floor((Date.UTC(dt.getFullYear(),dt.getMonth(),dt.getDate())-Date.UTC(2000,0,7))/86400000);
+}
+function dayGZ(dt){return gz(dayBase(dt));}
+function hourGZ(db,h){return gz((db%5)*2+Math.floor(((h+1)%24)/2));}
+
+/* ══ 农历：使用 lunar-javascript 库，永远精确 ══════ */
+function getLunarObj(dt) {
+  if(typeof Solar === 'undefined') return null;
+  return Solar.fromYmd(dt.getFullYear(), dt.getMonth()+1, dt.getDate()).getLunar();
+}
+function lunar(dt) {
+  const l = getLunarObj(dt);
+  if(!l) return '—';
+  return l.getMonthInChinese()+'月'+l.getDayInChinese();
+}
+function getLunarMonth(dt) {
+  const l = getLunarObj(dt);
+  return l ? l.getMonth() : dt.getMonth()+1;
+}
+function getLunarDay(dt) {
+  const l = getLunarObj(dt);
+  return l ? l.getDay() : dt.getDate();
+}
+
+function jqInfo(dt){
+  const y=dt.getFullYear(),m=dt.getMonth()+1,d=dt.getDate(),cur=m*100+d;
+  let curr=JQ[JQ.length-1],minB=9999,nxt=JQ[0],minF=9999;
+  JQ.forEach(j=>{
+    const n=j.m*100+j.d,bk=cur>=n?cur-n:9999,fw=n>cur?n-cur:(1200-cur+n);
+    if(bk<minB){minB=bk;curr=j;}if(fw<minF){minF=fw;nxt=j;}
+  });
+  const ny=(nxt.m<m||(nxt.m===m&&nxt.d<=d))?y+1:y;
+  return{curr:curr.n,nxt:nxt.n,
+    nxtDate:`${ny}/${String(nxt.m).padStart(2,'0')}/${String(nxt.d).padStart(2,'0')}`,
+    days:Math.round(minF>500?minF-1200+365:minF)};
+}
+function season(m){
+  if(m>=3&&m<=5)return{n:'春季',d:'东方·木'};
+  if(m>=6&&m<=8)return{n:'夏季',d:'南方·火'};
+  if(m>=9&&m<=11)return{n:'秋季',d:'西方·金'};
+  return{n:'冬季',d:'北方·水'};
+}
+function dayOfYear(dt){return Math.floor((dt-new Date(dt.getFullYear(),0,0))/86400000);}
+function pickN(arr,n,seed){
+  const r=[],u=new Set();let k=seed;
+  while(r.length<n){const i=((k*2654435761)>>>0)%arr.length;if(!u.has(i)){u.add(i);r.push(arr[i]);}k++;}
+  return r;
+}
+function daySeed(dt){return dt.getFullYear()*10000+(dt.getMonth()+1)*100+dt.getDate();}
+
+/* ══ Canvas 表盘（只画背景环和太极，不画指针） ══════ */
+const cc=document.getElementById('cc');
+const ctx=cc.getContext('2d');
+let S=500;
+
+const BAGUA=['乾','兑','离','震','巽','坎','艮','坤'];
+const WX5=['木','火','土','金','水'];
+const WX5C=['#88dd66','#ff6644','#ddaa44','#aaccff','#7799ff'];
+
+function resizeClock(){
+  const left=document.getElementById('left');
+  const cd=document.getElementById('cd');
+  const dt=document.getElementById('digital-time');
+  const isMobile=window.innerWidth/window.innerHeight < 3/4;
+  let avail;
+  if(isMobile){
+    // 手机竖屏：宽度优先，最大不超过视口的88%
+    avail=Math.min(window.innerWidth*0.88, window.innerHeight*0.55);
+  } else {
+    avail=Math.min(left.clientWidth-4, left.clientHeight-(cd.offsetHeight||60)-(dt.offsetHeight||30)-28);
+  }
+  S=Math.max(180,Math.floor(avail));
+  const dpr=window.devicePixelRatio||1;
+  cc.width=S*dpr; cc.height=S*dpr;
+  cc.style.width=S+'px'; cc.style.height=S+'px';
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  // 同步调整 DOM 指针尺寸
+  updateHandSizes();
+}
+
+/* ── DOM 指针尺寸设置 ── */
+function updateHandSizes(){
+  const f=S/500;
+  const hh=document.getElementById('h-hand');
+  const mh=document.getElementById('m-hand');
+  const sh=document.getElementById('s-hand');
+  // 定位到表盘中心
+  [hh,mh,sh].forEach(el=>{
+    el.style.left=S/2+'px';
+    el.style.top=S/2+'px';
+  });
+  // 时针
+  hh.style.setProperty('--hw', Math.round(8*f)+'px');
+  hh.style.setProperty('--hl', Math.round(S*0.26)+'px');
+  hh.querySelector('.hand').style.height=Math.round(S*0.26)+'px';
+  hh.querySelector('.hand').style.width=Math.round(8*f)+'px';
+  hh.querySelector('.hand').style.marginLeft=Math.round(-4*f)+'px';
+  // 分针
+  mh.style.setProperty('--mw', Math.round(5*f)+'px');
+  mh.style.setProperty('--ml', Math.round(S*0.37)+'px');
+  mh.querySelector('.hand').style.height=Math.round(S*0.37)+'px';
+  mh.querySelector('.hand').style.width=Math.round(5*f)+'px';
+  mh.querySelector('.hand').style.marginLeft=Math.round(-2.5*f)+'px';
+  // 秒针
+  sh.style.setProperty('--sw', Math.round(2*f)+'px');
+  sh.style.setProperty('--sl', Math.round(S*0.46)+'px');
+  sh.querySelector('.hand').style.height=Math.round(S*0.46)+'px';
+  sh.querySelector('.hand').style.width=Math.round(2*f)+'px';
+  sh.querySelector('.hand').style.marginLeft=Math.round(-1*f)+'px';
+}
+
+/* ── 旋转 DOM 指针（直接设 transform，GPU合成） ── */
+const hHandEl=document.getElementById('h-hand');
+const mHandEl=document.getElementById('m-hand');
+const sHandEl=document.getElementById('s-hand');
+
+function setHandAngles(now){
+  const ms=now.getMilliseconds();
+  const sec=now.getSeconds()+ms/1000;
+  const min=now.getMinutes()+sec/60;
+  const hr=(now.getHours()%12)+min/60;
+  const hDeg=hr/12*360;
+  const mDeg=min/60*360;
+  const sDeg=sec/60*360;
+  // transform-origin 在中心，hand 元素底部朝下，所以旋转前先把元素底部对准圆心
+  // hand-wrap 已定位到圆心，hand 的 bottom:0 使指针从圆心向上延伸
+  hHandEl.querySelector('.hand').style.transform=`rotate(${hDeg}deg)`;
+  mHandEl.querySelector('.hand').style.transform=`rotate(${mDeg}deg)`;
+  sHandEl.querySelector('.hand').style.transform=`rotate(${sDeg}deg)`;
+}
+
+/* ── 表盘绘制（不含指针） ── */
+function cRing(cx,cy,r,lw,col,alpha){
+  ctx.save();if(alpha!==undefined)ctx.globalAlpha=alpha;
+  ctx.beginPath();ctx.arc(cx,cy,r,0,Math.PI*2);
+  ctx.strokeStyle=col;ctx.lineWidth=lw;ctx.stroke();ctx.restore();
+}
+function cRingGlow(cx,cy,r,col){
+  // 两层宽线模拟光晕，无shadowBlur
+  ctx.save();
+  ctx.beginPath();ctx.arc(cx,cy,r,0,Math.PI*2);
+  ctx.strokeStyle=col.replace(/[\d.]+\)$/,'0.12)');ctx.lineWidth=6;ctx.stroke();
+  ctx.beginPath();ctx.arc(cx,cy,r,0,Math.PI*2);
+  ctx.strokeStyle=col.replace(/[\d.]+\)$/,'0.22)');ctx.lineWidth=2.5;ctx.stroke();
+  ctx.restore();
+}
+function cTicks(cx,cy,r,n,len,lw,col){
+  ctx.save();ctx.translate(cx,cy);
+  for(let i=0;i<n;i++){
+    const a=i/n*Math.PI*2-Math.PI/2;
+    ctx.beginPath();ctx.moveTo(Math.cos(a)*r,Math.sin(a)*r);
+    ctx.lineTo(Math.cos(a)*(r-len),Math.sin(a)*(r-len));
+    ctx.strokeStyle=col;ctx.lineWidth=lw;ctx.stroke();
+  }
+  ctx.restore();
+}
+function drawSectors(cx,cy,items,oR,iR,rot,hB,hRng,fs){
+  const n=items.length;
+  ctx.save();ctx.translate(cx,cy);
+  items.forEach((item,i)=>{
+    const a=i/n*Math.PI*2-Math.PI/2+rot;
+    const sa=a-Math.PI/n+0.05,ea=a+Math.PI/n-0.05;
+    const mR=(oR+iR)/2,h=hB+i/n*hRng;
+    ctx.beginPath();ctx.moveTo(Math.cos(sa)*iR,Math.sin(sa)*iR);
+    ctx.arc(0,0,oR,sa,ea);ctx.arc(0,0,iR,ea,sa,true);ctx.closePath();
+    ctx.fillStyle=`hsla(${h},48%,12%,0.58)`;ctx.fill();
+    ctx.strokeStyle=`hsla(${h},58%,44%,0.38)`;ctx.lineWidth=0.7;ctx.stroke();
+    ctx.save();ctx.translate(Math.cos(a)*mR,Math.sin(a)*mR);ctx.rotate(a+Math.PI/2);
+    ctx.font=`bold ${fs}px 'Noto Serif SC',serif`;
+    ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.fillStyle=`hsla(${h},68%,72%,0.96)`;ctx.fillText(item,0,0);
+    ctx.restore();
+  });
+  ctx.restore();
+}
+function drawWX5(cx,cy,oR,iR,rot){
+  ctx.save();ctx.translate(cx,cy);
+  WX5.forEach((w,i)=>{
+    const a=i/5*Math.PI*2-Math.PI/2+rot;
+    const sa=a-Math.PI/5+0.07,ea=a+Math.PI/5-0.07,mR=(oR+iR)/2;
+    ctx.beginPath();ctx.moveTo(Math.cos(sa)*iR,Math.sin(sa)*iR);
+    ctx.arc(0,0,oR,sa,ea);ctx.arc(0,0,iR,ea,sa,true);ctx.closePath();
+    ctx.globalAlpha=0.32;ctx.fillStyle=WX5C[i];ctx.fill();
+    ctx.globalAlpha=0.48;ctx.strokeStyle=WX5C[i];ctx.lineWidth=0.8;ctx.stroke();
+    ctx.globalAlpha=1;ctx.save();
+    ctx.translate(Math.cos(a)*mR,Math.sin(a)*mR);ctx.rotate(a+Math.PI/2);
+    ctx.font=`bold ${(oR-iR)*0.5}px 'Noto Serif SC',serif`;
+    ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.fillStyle=WX5C[i];ctx.fillText(w,0,0);ctx.restore();
+  });
+  ctx.restore();
+}
+function drawTaiChi(cx,cy,r,rot){
+  ctx.save();ctx.translate(cx,cy);ctx.rotate(rot);
+  const h=r/2;
+  ctx.beginPath();ctx.arc(0,0,r,-Math.PI/2,Math.PI/2,false);
+  ctx.arc(0,h,h,Math.PI/2,-Math.PI/2,true);ctx.arc(0,-h,h,Math.PI/2,-Math.PI/2,false);
+  ctx.closePath();ctx.fillStyle='rgba(240,210,75,0.2)';ctx.fill();
+  ctx.beginPath();ctx.arc(0,0,r,Math.PI/2,-Math.PI/2,false);
+  ctx.arc(0,-h,h,-Math.PI/2,Math.PI/2,true);ctx.arc(0,h,h,-Math.PI/2,Math.PI/2,false);
+  ctx.closePath();ctx.fillStyle='rgba(6,3,0,0.36)';ctx.fill();
+  ctx.beginPath();ctx.arc(0,-h,h*0.28,0,Math.PI*2);ctx.fillStyle='rgba(240,200,60,0.58)';ctx.fill();
+  ctx.beginPath();ctx.arc(0,h,h*0.28,0,Math.PI*2);ctx.fillStyle='rgba(5,2,0,0.68)';ctx.fill();
+  ctx.beginPath();ctx.arc(0,0,r,0,Math.PI*2);ctx.strokeStyle='rgba(200,160,40,0.28)';ctx.lineWidth=1;ctx.stroke();
+  ctx.restore();
+}
+function drawCenter(cx,cy,f){
+  ctx.beginPath();ctx.arc(cx,cy,6*f,0,Math.PI*2);
+  const cg=ctx.createRadialGradient(cx,cy,0,cx,cy,6*f);
+  cg.addColorStop(0,'#fffae0');cg.addColorStop(1,'#c88808');
+  ctx.fillStyle=cg;ctx.fill();
+  // 外圈描边
+  ctx.beginPath();ctx.arc(cx,cy,6*f,0,Math.PI*2);
+  ctx.strokeStyle='rgba(255,220,80,0.6)';ctx.lineWidth=1.5;ctx.stroke();
+}
+function drawDigital(cx,cy,now){
+  const h=String(now.getHours()).padStart(2,'0');
+  const m=String(now.getMinutes()).padStart(2,'0');
+  const s=String(now.getSeconds()).padStart(2,'0');
+  const ms=String(now.getMilliseconds()).padStart(3,'0');
+  const fs=Math.round(S*0.054);
+  ctx.save();ctx.translate(cx,cy);ctx.textAlign='center';ctx.textBaseline='middle';
+  ctx.font=`bold ${fs}px monospace`;
+  ctx.fillStyle='#f0d060';
+  ctx.fillText(`${h}:${m}:${s}`,0,fs*1.4);
+  ctx.font=`${Math.round(fs*0.42)}px monospace`;
+  ctx.fillStyle='rgba(200,160,40,0.55)';
+  ctx.fillText(`.${ms}`,0,fs*2.15);
+  ctx.restore();
+}
+/* ══ 小六壬 ══════════════════════════════════════
+   六宫：大安、留连、速喜、赤口、小吉、空亡
+   起课法：以月数起大安，顺数到日，再以所到宫起，顺数到时辰序
+══════════════════════════════════════════════════ */
+const XLR_NAMES = ['大安','留连','速喜','赤口','小吉','空亡'];
+const XLR_LUCK  = ['大吉','中平','小吉','大凶','中吉','末吉'];
+const XLR_MEAN  = [
+  '安稳吉祥，百事顺遂',
+  '事多留滞，进退两难',
+  '喜事将至，速办则成',
+  '口舌是非，宜忍为上',
+  '小有吉兆，徐徐图之',
+  '诸事落空，静守为宜'
+];
+
+function getXiaoLiuRen(now) {
+  const lunarMo = getLunarMonth(now);   // 农历月 1-12
+  const lunarD  = getLunarDay(now);     // 农历日 1-30
+  const h  = now.getHours();
+  const shi= Math.floor(((h+1)%24)/2) + 1; // 时辰序 1-12（子=1...亥=12）
+
+  // 起点宫：正月从大安(0)起，二月从留连(1)起...六月从空亡(5)起
+  const startPalace = (lunarMo - 1) % 6;
+  // 从起点宫数月份步数得月宫
+  const moonPalace  = (startPalace + lunarMo - 1) % 6;
+  // 从月宫数日步数得日宫
+  const dayPalace   = (moonPalace + lunarD - 1) % 6;
+  // 从日宫数时辰步数得最终宫
+  const finalPalace = (dayPalace + shi - 1) % 6;
+
+  return {
+    palace:  XLR_NAMES[finalPalace],
+    luck:    XLR_LUCK[finalPalace],
+    meaning: XLR_MEAN[finalPalace],
+    moonP:   moonPalace,
+    dayP:    dayPalace,
+    final:   finalPalace,
+    lunarMo, lunarD
+  };
+}
+
+/* ══ 奇门遁甲：使用 lunar-javascript 库精确计算 ═══ */
+const QM_DOOR_MEAN = [
+  '宜休息静守，不宜出行',
+  '诸事不宜，宜守不宜动',
+  '宜动不宜静，利竞争出行',
+  '宜隐匿藏伏，不宜进取',
+  '大吉，宜出行谋事求财',
+  '宜惊慎，防口舌是非',
+  '大吉，宜求财嫁娶出行',
+  '宜文书考试，不宜武斗'
+];
+// 八门顺序对应 BA_MEN_QI_MEN 索引
+const BA_MEN_ORDER = ['休','死','伤','杜','','开','惊','生','景'];
+
+function getQiMen(now) {
+  if(typeof Solar === 'undefined') return {ju:'—',juSub:'',star:'—',door:'—',doorSub:'—',msg:'—',isGood:false,isBad:false};
+  const lunar = Solar.fromYmdHms(
+    now.getFullYear(), now.getMonth()+1, now.getDate(),
+    now.getHours(), now.getMinutes(), now.getSeconds()
+  ).getLunar();
+
+  const timeNS = lunar.getTimeNineStar();
+  const idx    = timeNS._p.index; // 0-8
+
+  const starName = NineStar.NAME_QI_MEN[idx];   // 天蓬/天芮...
+  const doorChar = NineStar.BA_MEN_QI_MEN[idx]; // 休/死/伤...
+  const luck     = NineStar.LUCK_QI_MEN[idx];   // 大吉/小吉/大凶...
+
+  // 八门对应索引找含义
+  const doorIdx  = BA_MEN_ORDER.indexOf(doorChar);
+  const doorMean = doorIdx >= 0 ? QM_DOOR_MEAN[doorIdx] : '';
+  const doorFull = doorChar ? doorChar+'门' : '中宫';
+
+  // 节气信息用于显示局
+  const nextJq  = lunar.getNextJieQi();
+  const prevJq  = lunar.getPrevJieQi();
+  const jqName  = prevJq ? prevJq.toString() : '—';
+
+  return {
+    ju:      jqName+'节气',
+    juSub:   idx < 5 ? '阳遁' : '阴遁',
+    star:    starName,
+    door:    doorFull,
+    doorSub: doorMean,
+    msg:     luck,
+    isGood:  luck==='大吉'||luck==='小吉',
+    isBad:   luck==='大凶'
+  };
+}
+
+function getRots(now){
+  const ms=now.getMilliseconds(),sec=now.getSeconds()+ms/1000;
+  const min=now.getMinutes()+sec/60,hr=now.getHours()+min/60;
+  const P=Math.PI*2;
+  return{
+    dizhi:hr/12*P, tiangan:-min/60*P,
+    bagua:sec/60*P, wuxing:-min/30*P, taichi:sec/120*P
+  };
+}
+
+/* ══ 粒子 ══════════════════════════════════════════ */
+let pts=[];
+function spawnP(x,y,col,n){
+  for(let i=0;i<n;i++){
+    const a=Math.random()*Math.PI*2,sp=Math.random()*1.2+0.3;
+    pts.push({x,y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,
+              life:1,dec:Math.random()*0.025+0.012,r:Math.random()*1.8+0.3,col});
+  }
+  if(pts.length>300)pts.splice(0,50);
+}
+function drawPts(){
+  pts=pts.filter(p=>p.life>0);
+  pts.forEach(p=>{
+    p.x+=p.vx;p.y+=p.vy;p.vy+=0.015;p.life-=p.dec;
+    ctx.beginPath();ctx.arc(p.x,p.y,p.r*p.life,0,Math.PI*2);
+    ctx.fillStyle=p.col.replace('1)',(p.life*0.8).toFixed(2)+')');ctx.fill();
+  });
+}
+
+/* ══ UI 更新 ══════════════════════════════════════ */
+let uiSec=-1;
+function updateUI(now){
+  const s=now.getSeconds();if(s===uiSec)return;uiSec=s;
+  const y=now.getFullYear(),mo=now.getMonth()+1,d=now.getDate(),h=now.getHours();
+  const sci=SHICHEN[Math.floor(((h+1)%24)/2)];
+  const sea=season(mo);
+
+  // 用库获取所有精确数据
+  const L = getLunarObj(now);
+
+  document.getElementById('t-date').textContent=`${y}年${mo}月${d}日  ${WD[now.getDay()]}`;
+
+  // 四柱 — 全用库
+  if(L){
+    document.getElementById('r-yy').textContent=L.getYearInGanZhi()+'年';
+    document.getElementById('r-ys').textContent=L.getYearShengXiao()+'·'+L.getYearNaYin();
+    document.getElementById('r-my').textContent=L.getMonthInGanZhi()+'月';
+    document.getElementById('r-ms').textContent='纳音：'+L.getMonthNaYin();
+    document.getElementById('r-dy').textContent=L.getDayInGanZhi()+'日';
+    document.getElementById('r-ds').textContent='纳音：'+L.getDayNaYin();
+    document.getElementById('r-hy').textContent=L.getTimeInGanZhi()+'时';
+    document.getElementById('r-hs').textContent=`${String(sci.s%24).padStart(2,'0')}:00–${String(sci.e%24).padStart(2,'0')}:00`;
+
+    // 农历 + 六曜
+    document.getElementById('r-nl').textContent=L.getMonthInChinese()+'月'+L.getDayInChinese();
+    document.getElementById('r-liuyao').textContent='六曜：'+L.getLiuYao();
+    document.getElementById('r-sx').textContent=L.getYearShengXiao();
+    document.getElementById('r-ss').textContent=L.getYearInGanZhi()+'年';
+    document.getElementById('r-sc').textContent=sci.n;
+    document.getElementById('r-st').textContent=`${String(sci.s%24).padStart(2,'0')}:00–${String(sci.e%24).padStart(2,'0')}:00`;
+    document.getElementById('r-wd').textContent=WD[now.getDay()];
+    document.getElementById('r-wds').textContent=`${y}/${String(mo).padStart(2,'0')}/${String(d).padStart(2,'0')}`;
+
+    // 日纳音 + 冲煞
+    document.getElementById('r-wx').textContent=L.getDayNaYin();
+    document.getElementById('r-chong').textContent='冲'+L.getDayChong()+' 煞'+L.getDaySha()+' 旬空'+L.getDayXunKong();
+
+    // 节气
+    const prevJq=L.getPrevJieQi(), nextJq=L.getNextJieQi();
+    const nextJqSolar=nextJq?nextJq.getSolar():null;
+    const nextJqDate=nextJqSolar?nextJqSolar.toString():'—';
+    const daysToNext=nextJqSolar?Math.ceil((new Date(nextJqSolar.getYear(),nextJqSolar.getMonth()-1,nextJqSolar.getDay())-new Date(y,mo-1,d))/86400000):0;
+    document.getElementById('r-jq').textContent=prevJq?prevJq.toString():'—';
+    document.getElementById('r-jqs').textContent='距下节气'+daysToNext+'天';
+    document.getElementById('r-nj').textContent=nextJq?nextJq.toString():'—';
+    document.getElementById('r-njs').textContent=nextJqDate;
+
+    // 吉神方位
+    document.getElementById('r-se').textContent='喜'+L.getPositionXiDesc()+' 财'+L.getPositionCaiDesc();
+    document.getElementById('r-di').textContent='福'+L.getPositionFuDesc()+' 贵'+L.getPositionYangGuiDesc();
+
+    // 物候
+    document.getElementById('r-wuhou').textContent=L.getHou()||'—';
+
+    // 二十八宿
+    document.getElementById('r-xiu').textContent=L.getXiu();
+    document.getElementById('r-xiu-luck').textContent=L.getXiuLuck();
+
+    // 吉神凶煞
+    document.getElementById('r-jishen').textContent=L.getDayJiShen().slice(0,4).join('  ');
+    document.getElementById('r-xiong').textContent=L.getDayXiongSha().slice(0,3).join('  ');
+
+    // 宜忌 — 库精确数据
+    document.getElementById('r-yi').textContent=L.getDayYi().slice(0,5).join('  ');
+    document.getElementById('r-ji').textContent=L.getDayJi().slice(0,4).join('  ');
+  }
+
+  // 小六壬
+  const xlr = getXiaoLiuRen(now);
+  document.getElementById('xlr-palace').textContent  = xlr.palace;
+  document.getElementById('xlr-meaning').textContent = xlr.meaning;
+  document.getElementById('xlr-luck').textContent    = xlr.luck;
+  const luckEl = document.getElementById('xlr-luck');
+  luckEl.className = 'vl sm';
+  if(xlr.luck==='大吉'||xlr.luck==='中吉'||xlr.luck==='小吉') luckEl.style.color='#7ee8a2';
+  else if(xlr.luck==='大凶') luckEl.style.color='#ff8a7a';
+  else luckEl.style.color='#f0d060';
+
+  // 六宫时辰图
+  const xlrWheel = document.getElementById('xlr-wheel');
+  const shi12 = ['子','丑','寅','卯','辰','巳','午','未','申','酉','戌','亥'];
+  const curShi = Math.floor(((now.getHours()+1)%24)/2) + 1;
+  const dayP = xlr.dayP;
+  let html='';
+  for(let i=0;i<6;i++){
+    const shiInPalace=[];
+    for(let s=1;s<=12;s++){
+      if((dayP+s-1)%6===i) shiInPalace.push(s);
+    }
+    const isCur = shiInPalace.includes(curShi);
+    html+=`<div class="xlr-cell${isCur?' xc-cur':''}">`;
+    html+=`<div class="xc-gong">${XLR_NAMES[i]}</div>`;
+    html+=`<div class="xc-shi">${shiInPalace.map(s=>shi12[s-1]).join(' ')}</div>`;
+    html+=`</div>`;
+  }
+  xlrWheel.innerHTML=html;
+
+  // 奇门遁甲
+  const qm = getQiMen(now);
+  document.getElementById('qm-ju').textContent      = qm.ju;
+  document.getElementById('qm-ju-sub').textContent  = qm.juSub;
+  document.getElementById('qm-star').textContent    = qm.star;
+  document.getElementById('qm-door').textContent    = qm.door;
+  document.getElementById('qm-door-sub').textContent= qm.doorSub;
+  document.getElementById('qm-msg').textContent     = qm.msg;
+  document.getElementById('qm-door').style.color    = qm.isGood?'#7ee8a2':qm.isBad?'#ff8a7a':'#f0d060';
+}
+let cdSec=-1;
+function updateCountdown(now){
+  const s=now.getSeconds();if(s===cdSec)return;cdSec=s;
+  const y=now.getFullYear(),next=new Date(y+1,0,1,0,0,0,0);
+  const tot=next-new Date(y,0,1),left=next-now;
+  const days=Math.floor(left/86400000);
+  document.getElementById('cd-l1').textContent=`距${y+1}年元旦`;
+  document.getElementById('cd-days').textContent=days;
+  document.getElementById('cd-hms').textContent=(now.getHours()+now.getMinutes()/60+now.getSeconds()/3600).toFixed(2);
+  document.getElementById('cd-pct').textContent=((tot-left)/tot*100).toFixed(2)+'%';
+  document.getElementById('cd-yday').textContent=dayOfYear(now);
+}
+
+/* ══ 主循环 ══════════════════════════════════════ */
+resizeClock();
+let prevSec=-1;
+
+function loop(ts){
+  requestAnimationFrame(loop);
+  const now=new Date();
+  const cx=S/2,cy=S/2,f=S/500,T=ts*0.001;
+  const sec=now.getSeconds()+now.getMilliseconds()/1000;
+  const R=getRots(now);
+
+  // 秒变时发粒子，用整秒角度（不加毫秒），位置准确
+  const curS=now.getSeconds();
+  if(curS!==prevSec){
+    prevSec=curS;
+    const sa=curS/60*Math.PI*2-Math.PI/2;
+    spawnP(cx+Math.cos(sa)*S*0.46,cy+Math.sin(sa)*S*0.46,'rgba(255,100,100,1)',4);
+  }
+
+  // ── 表盘 canvas ──
+  ctx.clearRect(0,0,S,S);
+
+  const bg=ctx.createRadialGradient(cx,cy,0,cx,cy,S*0.47);
+  bg.addColorStop(0,'rgba(22,10,2,0.7)');bg.addColorStop(0.55,'rgba(6,3,0,0.88)');bg.addColorStop(1,'rgba(0,0,0,0)');
+  ctx.fillStyle=bg;ctx.beginPath();ctx.arc(cx,cy,S*0.47,0,Math.PI*2);ctx.fill();
+
+  cRingGlow(cx,cy,S*0.455,'rgba(160,100,12,0.5)');
+  cRing(cx,cy,S*0.455,1.8,'rgba(188,140,30,0.5)');
+  cTicks(cx,cy,S*0.452,60,7*f,0.8,'rgba(188,140,30,0.38)');
+  cTicks(cx,cy,S*0.452,12,14*f,2,'rgba(215,166,50,0.68)');
+
+  drawSectors(cx,cy,DZ,S*0.445,S*0.382,R.dizhi,192,68,S*0.048);
+  cRingGlow(cx,cy,S*0.38,'rgba(78,135,190,0.4)');
+  cRing(cx,cy,S*0.38,1,'rgba(98,145,190,0.32)');
+
+  drawSectors(cx,cy,TG,S*0.374,S*0.316,R.tiangan,26,36,S*0.048);
+  cRingGlow(cx,cy,S*0.314,'rgba(188,140,30,0.4)');
+  cRing(cx,cy,S*0.314,1,'rgba(188,140,30,0.4)');
+
+  drawSectors(cx,cy,BAGUA,S*0.308,S*0.25,R.bagua,0,360,S*0.048);
+  cRingGlow(cx,cy,S*0.248,'rgba(130,188,80,0.35)');
+  cRing(cx,cy,S*0.248,1,'rgba(130,188,80,0.32)');
+
+  drawWX5(cx,cy,S*0.242,S*0.196,R.wuxing);
+  cRingGlow(cx,cy,S*0.194,'rgba(170,130,50,0.35)');
+  cRing(cx,cy,S*0.194,1,'rgba(170,130,50,0.34)');
+
+  cTicks(cx,cy,S*0.188,60,5*f,0.7,'rgba(188,150,42,0.38)');
+  cTicks(cx,cy,S*0.188,12,10*f,1.5,'rgba(215,166,50,0.65)');
+  cRing(cx,cy,S*0.172,0.7,'rgba(165,120,22,0.24)');
+
+  drawTaiChi(cx,cy,S*0.1,R.taichi);
+  drawPts();
+
+  // ── DOM元素更新（GPU合成，不闪） ──
+  setHandAngles(now);
+
+  // 数字时间
+  const hh2=String(now.getHours()).padStart(2,'0');
+  const mm2=String(now.getMinutes()).padStart(2,'0');
+  const ss2=String(now.getSeconds()).padStart(2,'0');
+  const ms2=String(now.getMilliseconds()).padStart(3,'0');
+  document.getElementById('dt-hms').textContent=`${hh2}:${mm2}:${ss2}`;
+  document.getElementById('dt-ms').textContent=`.${ms2}`;
+
+  updateUI(now);
+  updateCountdown(now);
+  renderStars(T);
+}
+
+requestAnimationFrame(loop);
+</script>
 </body>
 </html>
